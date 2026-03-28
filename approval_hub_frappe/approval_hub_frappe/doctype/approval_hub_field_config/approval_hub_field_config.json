@@ -1,0 +1,154 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-03-26 10:42:17.648500",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "fieldname",
+  "label",
+  "fieldtype",
+  "display_in_list",
+  "display_in_detail",
+  "display_in_card",
+  "is_filter",
+  "filter_type",
+  "filter_options",
+  "width",
+  "sequence",
+  "formatter",
+  "is_primary_title",
+  "is_secondary_title",
+  "is_hidden",
+  "is_required_in_output",
+  "allow_sorting",
+  "allow_grouping",
+  "help_text"
+ ],
+ "fields": [
+  {
+   "fieldname": "fieldname",
+   "fieldtype": "Data",
+   "label": "Fieldname"
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label"
+  },
+  {
+   "fieldname": "fieldtype",
+   "fieldtype": "Select",
+   "label": "Fieldtype",
+   "options": "Data\nSelect\nLink\nCheck"
+  },
+  {
+   "default": "0",
+   "fieldname": "display_in_list",
+   "fieldtype": "Check",
+   "label": "Display In List"
+  },
+  {
+   "default": "0",
+   "fieldname": "display_in_detail",
+   "fieldtype": "Check",
+   "label": "Display In Detail"
+  },
+  {
+   "default": "0",
+   "fieldname": "display_in_card",
+   "fieldtype": "Check",
+   "label": "Display In Card"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_filter",
+   "fieldtype": "Check",
+   "label": "Is Filter"
+  },
+  {
+   "fieldname": "filter_type",
+   "fieldtype": "Select",
+   "label": "Filter Type",
+   "options": "Text\nLink\nDate\nSelect\nNumber"
+  },
+  {
+   "fieldname": "filter_options",
+   "fieldtype": "Small Text",
+   "label": "Filter Options"
+  },
+  {
+   "fieldname": "width",
+   "fieldtype": "Int",
+   "label": "Width",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "label": "Sequence",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "formatter",
+   "fieldtype": "Data",
+   "label": "Formatter"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_primary_title",
+   "fieldtype": "Check",
+   "label": "Is Primary Title"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_secondary_title",
+   "fieldtype": "Check",
+   "label": "Is Secondary Title"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_hidden",
+   "fieldtype": "Check",
+   "label": "Is Hidden"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_required_in_output",
+   "fieldtype": "Check",
+   "label": "Is Required In Output"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_sorting",
+   "fieldtype": "Check",
+   "label": "Allow Sorting"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_grouping",
+   "fieldtype": "Check",
+   "label": "Allow Grouping"
+  },
+  {
+   "fieldname": "help_text",
+   "fieldtype": "Small Text",
+   "label": "Help Text"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-03-26 10:50:52.358708",
+ "modified_by": "Administrator",
+ "module": "Approval Hub Frappe",
+ "name": "Approval Hub Field Config",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

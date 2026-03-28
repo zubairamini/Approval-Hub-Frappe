@@ -1,0 +1,84 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-03-26 10:54:56.557307",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "respect_user_permissions",
+  "respect_branch_permissions",
+  "allow_system_manager_override",
+  "aging_warning_days",
+  "aging_critical_days",
+  "default_page_size"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "default": "0",
+   "fieldname": "respect_user_permissions",
+   "fieldtype": "Check",
+   "label": "Respect User Permissions"
+  },
+  {
+   "default": "0",
+   "fieldname": "respect_branch_permissions",
+   "fieldtype": "Check",
+   "label": "Respect Branch Permissions"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_system_manager_override",
+   "fieldtype": "Check",
+   "label": "Allow System Manager Override"
+  },
+  {
+   "fieldname": "aging_warning_days",
+   "fieldtype": "Int",
+   "label": "Aging Warning Days",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "aging_critical_days",
+   "fieldtype": "Int",
+   "label": "Aging Critical Days",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "default_page_size",
+   "fieldtype": "Int",
+   "label": "Default Page Size"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-03-26 10:57:24.569069",
+ "modified_by": "Administrator",
+ "module": "Approval Hub Frappe",
+ "name": "Approval Hub Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,0 +1,203 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-03-26 10:24:54.071061",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "doctype_name",
+  "is_active",
+  "sequence",
+  "module",
+  "label",
+  "workflow_required",
+  "track_pending",
+  "track_history",
+  "show_in_dashboard",
+  "allow_quick_action",
+  "enable_overdue_tracking",
+  "sla_days",
+  "branch_field",
+  "department_field",
+  "company_field",
+  "requester_field",
+  "owner_field",
+  "title_field",
+  "amount_field",
+  "date_field",
+  "status_field",
+  "workflow_state_field",
+  "employee_field",
+  "permission_mode",
+  "branch_resolution_mode"
+ ],
+ "fields": [
+  {
+   "fieldname": "doctype_name",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Doctype Name",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active"
+  },
+  {
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "label": "Sequence",
+   "non_negative": 1
+  },
+  {
+   "fetch_from": "doctype_name.module",
+   "fieldname": "module",
+   "fieldtype": "Data",
+   "label": "Module",
+   "read_only": 1
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label"
+  },
+  {
+   "default": "0",
+   "fieldname": "workflow_required",
+   "fieldtype": "Check",
+   "label": "Workflow Required"
+  },
+  {
+   "default": "0",
+   "fieldname": "track_pending",
+   "fieldtype": "Check",
+   "label": "Track Pending"
+  },
+  {
+   "default": "0",
+   "fieldname": "track_history",
+   "fieldtype": "Check",
+   "label": "Track History"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_in_dashboard",
+   "fieldtype": "Check",
+   "label": "Show In Dashboard"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_quick_action",
+   "fieldtype": "Check",
+   "label": "Allow Quick Action"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_overdue_tracking",
+   "fieldtype": "Check",
+   "label": "Enable Overdue Tracking"
+  },
+  {
+   "fieldname": "sla_days",
+   "fieldtype": "Int",
+   "label": "Sla Days",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "branch_field",
+   "fieldtype": "Data",
+   "label": "Branch Field"
+  },
+  {
+   "fieldname": "department_field",
+   "fieldtype": "Data",
+   "label": "Department Field"
+  },
+  {
+   "fieldname": "company_field",
+   "fieldtype": "Data",
+   "label": "Company Field"
+  },
+  {
+   "fieldname": "requester_field",
+   "fieldtype": "Data",
+   "label": "Requester Field"
+  },
+  {
+   "fieldname": "owner_field",
+   "fieldtype": "Data",
+   "label": "Owner Field"
+  },
+  {
+   "fieldname": "title_field",
+   "fieldtype": "Data",
+   "label": "Title Field"
+  },
+  {
+   "fieldname": "amount_field",
+   "fieldtype": "Data",
+   "label": "Amount Field"
+  },
+  {
+   "fieldname": "date_field",
+   "fieldtype": "Data",
+   "label": "Date Field"
+  },
+  {
+   "fieldname": "status_field",
+   "fieldtype": "Data",
+   "label": "Status Field"
+  },
+  {
+   "fieldname": "workflow_state_field",
+   "fieldtype": "Data",
+   "label": "Workflow State Field"
+  },
+  {
+   "fieldname": "employee_field",
+   "fieldtype": "Data",
+   "label": "Employee Field"
+  },
+  {
+   "fieldname": "permission_mode",
+   "fieldtype": "Select",
+   "label": "Permission Mode",
+   "options": "Standard\nStrict\nCustom"
+  },
+  {
+   "fieldname": "branch_resolution_mode",
+   "fieldtype": "Select",
+   "label": "Branch Resolution Mode",
+   "options": "Direct Field\nLinked Field\nExpression"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-03-26 14:14:39.429585",
+ "modified_by": "Administrator",
+ "module": "Approval Hub Frappe",
+ "name": "Approval Hub Doctype Config",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

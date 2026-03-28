@@ -145,6 +145,14 @@ app_license = "gpl-3.0"
 # 	}
 # }
 
+
+
+doc_events = {
+    "Approval Hub Doctype Config": {
+        "validate": "approval_hub_frappe.approval_hub_frappe.doctype.approval_hub_doctype_config.approval_hub_doctype_config.validate_doctype_config",
+    },
+}
+
 # Scheduled Tasks
 # ---------------
 

@@ -1,0 +1,26 @@
+{
+ "content": null,
+ "creation": "2026-03-26 10:54:26.910035",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-03-26 14:01:24.199651",
+ "modified_by": "Administrator",
+ "module": "Approval Hub Frappe",
+ "name": "approval-hub",
+ "owner": "Administrator",
+ "page_name": "approval-hub",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Employee"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Approval Hub"
+}
