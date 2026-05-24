@@ -1,166 +1,76 @@
-"""
-approval_hub_frappe/api/approval_hub.py
-
-Public API methods exposed to the Approval Hub page and external callers.
-All whitelisted methods enforce session user and permission checks.
-"""
-
+import json
 import frappe
 from frappe import _
 from approval_hub_frappe.services.pending_engine import PendingApprovalEngine
 from approval_hub_frappe.services.workflow_service import apply_workflow_action
-from approval_hub_frappe.services.log_service import create_approval_hub_log
-from approval_hub_frappe.utils.permission_utils import (
-    get_current_user_roles,
-    get_user_allowed_branches,
-    can_user_approve_document,
-    has_document_access,
-)
+from approval_hub_frappe.utils.permission_utils import can_user_approve_document
 from approval_hub_frappe.utils.settings_utils import get_approval_hub_settings
-from approval_hub_frappe.utils.config_utils import get_active_doctype_configs
+from approval_hub_frappe.utils.config_utils import get_active_doctype_configs, get_config_for_doctype
 
 
-# ---------------------------------------------------------------------------
-# Settings & Config
-# ---------------------------------------------------------------------------
-
-@frappe.whitelist()
-def get_settings():
-    """Return Approval Hub Settings for the current session."""
-    return get_approval_hub_settings()
-
-
-@frappe.whitelist()
-def get_doctype_configs():
-    """Return all active doctype configs ordered by sequence."""
-    return get_active_doctype_configs()
-
-
-# ---------------------------------------------------------------------------
-# Pending approvals
-# ---------------------------------------------------------------------------
-
-@frappe.whitelist()
-def get_pending_approvals(filters=None, page=1, page_size=None):
-    """
-    Return paginated list of documents pending approval for the current user.
-
-    :param filters: dict – optional extra filters {doctype, branch, workflow_state,
-                    date_from, date_to}
-    :param page:    int  – 1-based page number
-    :param page_size: int – override default page size from settings
-    :returns: {items: [...], total: int, page: int, page_size: int}
-    """
+def _parse_filters(filters):
     if isinstance(filters, str):
-        import json
-        filters = json.loads(filters) if filters else {}
+        return json.loads(filters) if filters else {}
+    return filters or {}
 
-    filters = filters or {}
-    page = int(page or 1)
 
+@frappe.whitelist()
+def get_pending_approvals(filters=None, start=0, page_length=20, page=None, page_size=None):
+    filters = _parse_filters(filters)
     settings = get_approval_hub_settings()
-
     if not settings.get("enabled"):
         frappe.throw(_("Approval Hub is currently disabled."), frappe.ValidationError)
 
-    if not page_size:
-        page_size = settings.get("default_page_size") or 20
-    page_size = int(page_size)
+    if page is None:
+        page_length = int(page_size or page_length or settings.get("default_page_size") or 20)
+        start = int(start or 0)
+        page = (start // page_length) + 1
+    else:
+        page = int(page)
+        page_length = int(page_size or page_length or settings.get("default_page_size") or 20)
 
-    engine = PendingApprovalEngine(
-        user=frappe.session.user,
-        settings=settings,
-        filters=filters,
-    )
-    result = engine.get_pending(page=page, page_size=page_size)
-    return result
+    engine = PendingApprovalEngine(user=frappe.session.user, settings=settings, filters=filters)
+    return engine.get_pending(page=page, page_size=page_length)
 
-
-# ---------------------------------------------------------------------------
-# Summary / dashboard
-# ---------------------------------------------------------------------------
 
 @frappe.whitelist()
 def get_approval_summary(filters=None):
-    """
-    Return summary counts for the dashboard cards:
-      - my_pending
-      - overdue
-      - approved_today
-      - rejected_today
-    """
-    if isinstance(filters, str):
-        import json
-        filters = json.loads(filters) if filters else {}
-
-    filters = filters or {}
-
+    filters = _parse_filters(filters)
     settings = get_approval_hub_settings()
     if not settings.get("enabled"):
-        return {"my_pending": 0, "overdue": 0, "approved_today": 0, "rejected_today": 0}
-
-    engine = PendingApprovalEngine(
-        user=frappe.session.user,
-        settings=settings,
-        filters=filters,
-    )
+        return {"total_pending": 0, "critical": 0, "warning": 0, "normal": 0, "by_doctype": {}}
+    engine = PendingApprovalEngine(user=frappe.session.user, settings=settings, filters=filters)
     return engine.get_summary()
 
 
-# ---------------------------------------------------------------------------
-# Branches
-# ---------------------------------------------------------------------------
-
 @frappe.whitelist()
-def get_branches(user=None):
-    """Return branches the current (or given) user is allowed to act on."""
-    user = user or frappe.session.user
-    # Only System Manager can query for another user
-    if user != frappe.session.user and "System Manager" not in get_current_user_roles():
-        frappe.throw(_("Not permitted."), frappe.PermissionError)
-    return get_user_allowed_branches(user)
+def check_can_approve(doctype, docname):
+    config = get_config_for_doctype(doctype)
+    settings = get_approval_hub_settings()
+    return can_user_approve_document(doctype, docname, frappe.session.user, config=config, settings=settings)
 
-
-# ---------------------------------------------------------------------------
-# Document eligibility check
-# ---------------------------------------------------------------------------
-
-@frappe.whitelist()
-def check_can_approve(doctype, docname, user=None):
-    """Return whether the current user can approve a specific document."""
-    user = user or frappe.session.user
-    if user != frappe.session.user and "System Manager" not in get_current_user_roles():
-        frappe.throw(_("Not permitted."), frappe.PermissionError)
-    return can_user_approve_document(doctype, docname, user)
-
-
-# ---------------------------------------------------------------------------
-# Workflow action
-# ---------------------------------------------------------------------------
 
 @frappe.whitelist()
 def apply_workflow_action_from_hub(doctype, docname, action, remarks=None):
-    """
-    Apply a workflow action on a document from the Approval Hub page.
-
-    :param doctype:  str
-    :param docname:  str
-    :param action:   str – e.g. "Approve", "Reject", "Send Back"
-    :param remarks:  str – optional remarks stored in the log
-    :returns: {"success": True, "new_state": "...", "message": "..."}
-    """
-    frappe.has_permission(doctype, "write", docname, throw=True)
-
     settings = get_approval_hub_settings()
     if not settings.get("enabled"):
         frappe.throw(_("Approval Hub is currently disabled."))
+    can_do = check_can_approve(doctype, docname)
+    if action not in (can_do.get("allowed_actions") or []):
+        frappe.throw(_("You cannot perform this action."), frappe.PermissionError)
+    return apply_workflow_action(doctype=doctype, docname=docname, action=action, user=frappe.session.user, remarks=remarks, settings=settings)
 
-    result = apply_workflow_action(
-        doctype=doctype,
-        docname=docname,
-        action=action,
-        user=frappe.session.user,
-        remarks=remarks,
-        settings=settings,
-    )
-    return result
+
+@frappe.whitelist()
+def get_page_context():
+    settings = get_approval_hub_settings()
+    if not settings.get("enabled"):
+        return {"enabled": False, "message": _("Approval Hub is currently disabled.")}
+    configs = get_active_doctype_configs(for_pending=True)
+    engine = PendingApprovalEngine(user=frappe.session.user, settings=settings, filters={})
+    return {
+        "enabled": True,
+        "settings": settings,
+        "configs": [{"value": c["doctype_name"], "label": c.get("label") or c["doctype_name"]} for c in configs],
+        "summary": engine.get_summary(),
+    }
