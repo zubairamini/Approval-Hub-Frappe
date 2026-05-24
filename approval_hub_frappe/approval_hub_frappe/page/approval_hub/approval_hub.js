@@ -85,7 +85,7 @@ class ApprovalHub {
 
 	async _load_page_context() {
 		const r = await frappe.call({
-			method: "approval_hub_frappe.approval_hub_frappe.page.approval_hub.approval_hub.get_page_context",
+			method: "approval_hub_frappe.api.approval_hub.get_page_context",
 		});
 
 		const ctx = r.message || {};
@@ -120,32 +120,32 @@ class ApprovalHub {
 	_render_summary(data) {
 		const cards = [
 			{
-				key: "my_pending",
+				key: "total_pending",
 				label: __("My Pending"),
-				value: data.my_pending || 0,
+				value: data.total_pending || 0,
 				color: "var(--blue-500)",
 				icon: "⏳",
 			},
 			{
-				key: "overdue",
-				label: __("Overdue"),
-				value: data.overdue || 0,
+				key: "critical",
+				label: __("Critical"),
+				value: data.critical || 0,
 				color: "var(--red-500)",
 				icon: "🔴",
 			},
 			{
-				key: "approved_today",
-				label: __("Approved Today"),
-				value: data.approved_today || 0,
+				key: "warning",
+				label: __("Warning"),
+				value: data.warning || 0,
 				color: "var(--green-500)",
-				icon: "✅",
+				icon: "🟠",
 			},
 			{
-				key: "rejected_today",
-				label: __("Rejected Today"),
-				value: data.rejected_today || 0,
-				color: "var(--orange-500)",
-				icon: "❌",
+				key: "normal",
+				label: __("Normal"),
+				value: data.normal || 0,
+				color: "var(--green-500)",
+				icon: "🟢",
 			},
 		];
 
@@ -318,12 +318,12 @@ class ApprovalHub {
 	}
 
 	_render_row(item) {
-		const agingBadge = this._aging_badge(item.aging_days, item.aging_status);
+		const agingBadge = this._aging_badge(item.age_days, item.aging_status);
 		const stateBadge = `<span class="ah-state-badge">${item.workflow_state || ""}</span>`;
 
 		let actionHtml = `
 			<button class="btn btn-xs btn-default ah-open-doc"
-					data-url="${item.url_to_open_doc}" title="${__("Open Document")}">
+					data-url="${item.route}" title="${__("Open Document")}">
 				${__("Open")}
 			</button>
 		`;
@@ -334,7 +334,7 @@ class ApprovalHub {
 					(action) => `
 				<button class="btn btn-xs ah-quick-action ah-action-${frappe.scrub(action)}"
 						data-doctype="${item.doctype}"
-						data-docname="${item.document_name}"
+						data-docname="${item.name}"
 						data-action="${action}">
 					${__(action)}
 				</button>`
@@ -349,10 +349,10 @@ class ApprovalHub {
 
 		return `
 		<tr class="ah-row ${item.aging_status === "critical" ? "ah-row-critical" : ""}">
-			<td><span class="ah-doctype-badge">${item.label || item.doctype}</span></td>
+			<td><span class="ah-doctype-badge">${item.config_label || item.doctype}</span></td>
 			<td>
-				<a href="${item.url_to_open_doc}" target="_blank" class="ah-doc-link">
-					${item.document_name}
+				<a href="${item.route}" target="_blank" class="ah-doc-link">
+					${item.name}
 				</a>
 			</td>
 			<td class="ah-col-title" title="${item.title || ""}">${item.title || "—"}</td>
