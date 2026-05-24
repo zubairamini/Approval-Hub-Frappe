@@ -162,9 +162,7 @@
 .ah-aging-control .input-group {
   width: 100%;
 }
-.ah-field-actions {
-  justify-content: flex-end;
-}
+
 .ah-filter-actions-wrap {
   display: inline-flex;
   gap: 8px;
