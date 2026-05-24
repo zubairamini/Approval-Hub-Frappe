@@ -35,7 +35,6 @@ class PendingApprovalEngine:
         by_doctype = {}
         for item in all_items:
             by_doctype[item["doctype"]] = by_doctype.get(item["doctype"], 0) + 1
-        doctype_route = frappe.scrub(doctype).replace("_", "-")
         return {
             "total_pending": len(all_items),
             "critical": sum(1 for i in all_items if i.get("aging_status") == "critical"),
@@ -159,7 +158,7 @@ class PendingApprovalEngine:
             "allowed_actions": allowed_actions,
             "can_quick_action": config.get("allow_quick_action", False),
             "config_label": config.get("label") or doctype,
-            "route": f"/app/{doctype_route}/{docname}",
+            "route": f"/app/{frappe.scrub(doctype)}/{docname}",
         }
 
     def _compute_aging(self, date_value):
