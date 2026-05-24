@@ -23,41 +23,49 @@ def get_active_doctype_configs(for_pending=True, for_dashboard=False) -> list[di
     if for_dashboard:
         filters["show_in_dashboard"] = 1
 
+    requested_fields = [
+        "name",
+        "doctype_name",
+        "is_active",
+        "sequence",
+        "module",
+        "label",
+        "description",
+        "workflow_required",
+        "track_pending",
+        "track_history",
+        "show_in_dashboard",
+        "allow_quick_action",
+        "enable_overdue_tracking",
+        "sla_days",
+        "branch_field",
+        "department_field",
+        "company_field",
+        "requester_field",
+        "owner_field",
+        "title_field",
+        "amount_field",
+        "date_field",
+        "priority_field",
+        "status_field",
+        "workflow_state_field",
+        "assigned_to_field",
+        "employee_field",
+        "base_filters_json",
+        "permission_mode",
+        "branch_resolution_mode",
+    ]
+
+    # Keep queries compatible with instances where the DocType schema
+    # has not yet been migrated to include all optional fields.
+    meta = frappe.get_meta("Approval Hub Doctype Config")
+    existing_fields = set(meta.get_valid_columns())
+    fields_to_select = [f for f in requested_fields if f in existing_fields]
+
     configs = frappe.get_all(
         "Approval Hub Doctype Config",
         filters=filters,
-        fields=[
-            "name",
-            "doctype_name",
-            "is_active",
-            "sequence",
-            "module",
-            "label",
-            "description",
-            "workflow_required",
-            "track_pending",
-            "track_history",
-            "show_in_dashboard",
-            "allow_quick_action",
-            "enable_overdue_tracking",
-            "sla_days",
-            "branch_field",
-            "department_field",
-            "company_field",
-            "requester_field",
-            "owner_field",
-            "title_field",
-            "amount_field",
-            "date_field",
-            "priority_field",
-            "status_field",
-            "workflow_state_field",
-            "assigned_to_field",
-            "employee_field",
-            "base_filters_json",
-            "permission_mode",
-            "branch_resolution_mode",
-        ],
+        fields=fields_to_select,
         order_by="sequence asc, creation asc",
     )
 
