@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "field:doctype_name",
  "creation": "2026-03-26 10:24:54.071061",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -38,7 +39,8 @@
    "in_list_view": 1,
    "label": "Doctype Name",
    "options": "DocType",
-   "reqd": 1
+   "reqd": 1,
+   "unique": 1
   },
   {
    "default": "0",
@@ -107,6 +109,7 @@
    "non_negative": 1
   },
   {
+   "default": "branch",
    "fieldname": "branch_field",
    "fieldtype": "Data",
    "label": "Branch Field"
@@ -137,21 +140,25 @@
    "label": "Title Field"
   },
   {
+   "default": "total",
    "fieldname": "amount_field",
    "fieldtype": "Data",
    "label": "Amount Field"
   },
   {
+   "default": "date",
    "fieldname": "date_field",
    "fieldtype": "Data",
    "label": "Date Field"
   },
   {
+   "default": "status",
    "fieldname": "status_field",
    "fieldtype": "Data",
    "label": "Status Field"
   },
   {
+   "default": "workflow_state",
    "fieldname": "workflow_state_field",
    "fieldtype": "Data",
    "label": "Workflow State Field"
@@ -177,10 +184,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-26 14:14:39.429585",
+ "modified": "2026-05-24 13:46:18.336843",
  "modified_by": "Administrator",
  "module": "Approval Hub Frappe",
  "name": "Approval Hub Doctype Config",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

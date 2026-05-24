@@ -1,58 +1,67 @@
-"""
-approval_hub_frappe/utils/settings_utils.py
+"""Settings helpers for Approval Hub."""
 
-Helpers for loading and interpreting Approval Hub Settings.
-"""
+from __future__ import annotations
 
 import frappe
 from frappe.utils import cint
 
-
 _SETTINGS_CACHE_KEY = "approval_hub_settings_cache"
 
+_DEFAULTS = {
+    "enabled": 0,
+    "respect_user_permissions": 1,
+    "respect_branch_permissions": 0,
+    "allow_system_manager_override": 1,
+    "aging_warning_days": 3,
+    "aging_critical_days": 7,
+    "default_page_size": 20,
+}
 
-def get_approval_hub_settings(use_cache=True) -> dict:
-    """
-    Load the Approval Hub Settings singleton and return as a plain dict.
-    Caches within the current request.
-    """
-    # Use Frappe's local request cache to avoid repeated DB hits
+
+def get_approval_hub_settings(use_cache: bool = True) -> dict:
+    """Return settings dict with schema-safe fallbacks."""
     if use_cache and hasattr(frappe.local, _SETTINGS_CACHE_KEY):
         return getattr(frappe.local, _SETTINGS_CACHE_KEY)
 
-    try:
-        settings_doc = frappe.get_single("Approval Hub Settings")
-    except Exception:
-        # Settings not yet configured – return safe defaults
-        defaults = _default_settings()
-        _cache_settings(defaults)
-        return defaults
+    settings = dict(_DEFAULTS)
 
-    settings = {
-        "enabled": cint(settings_doc.enabled),
-        "respect_user_permissions": cint(settings_doc.respect_user_permissions),
-        "respect_branch_permissions": cint(settings_doc.respect_branch_permissions),
-        "allow_system_manager_override": cint(settings_doc.allow_system_manager_override),
-        "aging_warning_days": cint(settings_doc.aging_warning_days) or 3,
-        "aging_critical_days": cint(settings_doc.aging_critical_days) or 7,
-        "default_page_size": cint(settings_doc.default_page_size) or 20,
-    }
+    if not frappe.db.exists("DocType", "Approval Hub Settings"):
+        _cache_settings(settings)
+        return settings
+
+    try:
+        meta = frappe.get_meta("Approval Hub Settings")
+        cols = set(meta.get_valid_columns())
+        row = frappe.db.get_value("Approval Hub Settings", "Approval Hub Settings", "*", as_dict=True) or {}
+    except Exception:
+        _cache_settings(settings)
+        return settings
+
+    int_fields = [
+        "enabled",
+        "respect_user_permissions",
+        "respect_branch_permissions",
+        "allow_system_manager_override",
+        "aging_warning_days",
+        "aging_critical_days",
+        "default_page_size",
+    ]
+
+    for fieldname in int_fields:
+        if fieldname in cols and fieldname in row:
+            settings[fieldname] = cint(row.get(fieldname))
+
+    settings["enabled"] = 1 if settings["enabled"] else 0
+    settings["respect_user_permissions"] = 1 if settings["respect_user_permissions"] else 0
+    settings["respect_branch_permissions"] = 1 if settings["respect_branch_permissions"] else 0
+    settings["allow_system_manager_override"] = 1 if settings["allow_system_manager_override"] else 0
+    settings["aging_warning_days"] = max(0, settings["aging_warning_days"] or _DEFAULTS["aging_warning_days"])
+    settings["aging_critical_days"] = max(settings["aging_warning_days"] + 1, settings["aging_critical_days"] or _DEFAULTS["aging_critical_days"])
+    settings["default_page_size"] = min(500, max(1, settings["default_page_size"] or _DEFAULTS["default_page_size"]))
 
     _cache_settings(settings)
     return settings
 
 
-def _cache_settings(settings: dict):
+def _cache_settings(settings: dict) -> None:
     setattr(frappe.local, _SETTINGS_CACHE_KEY, settings)
-
-
-def _default_settings() -> dict:
-    return {
-        "enabled": 0,
-        "respect_user_permissions": 1,
-        "respect_branch_permissions": 0,
-        "allow_system_manager_override": 1,
-        "aging_warning_days": 3,
-        "aging_critical_days": 7,
-        "default_page_size": 20,
-    }

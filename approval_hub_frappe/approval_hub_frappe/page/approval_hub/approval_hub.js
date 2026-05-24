@@ -1,11 +1,3 @@
-/**
- * approval_hub_frappe/page/approval_hub/approval_hub.js
- *
- * Frappe Desk page JS for the Approval Hub.
- * Renders summary cards, filters, and a paginated approval list.
- * All data is fetched from backend Python methods.
- */
-
 /* global frappe */
 
 frappe.pages["approval-hub"].on_page_load = function (wrapper) {
@@ -14,705 +6,547 @@ frappe.pages["approval-hub"].on_page_load = function (wrapper) {
 		title: __("Approval Hub"),
 		single_column: true,
 	});
-
-	// Attach the ApprovalHub controller to the page
-	wrapper.approval_hub = new ApprovalHub(page, wrapper);
+	wrapper.approval_hub = new ApprovalHubPage(page, wrapper);
 };
 
 frappe.pages["approval-hub"].on_page_show = function (wrapper) {
 	if (wrapper.approval_hub) {
+		wrapper.approval_hub._collapse_sidebar_default();
 		wrapper.approval_hub.refresh();
 	}
 };
 
-// ============================================================
-// Main Controller
-// ============================================================
-
-class ApprovalHub {
+class ApprovalHubPage {
 	constructor(page, wrapper) {
 		this.page = page;
 		this.wrapper = wrapper;
-		this.$main = $(wrapper).find(".layout-main-section");
-
-		// State
+		this.$root = $(wrapper).find(".layout-main-section");
 		this.settings = {};
 		this.configs = [];
-		this.branches = [];
-		this.current_page = 1;
-		this.page_size = 20;
-		this.total = 0;
-		this.total_pages = 1;
-		this.filters = {};
-		this.loading = false;
+		this.state = {
+			filters: {
+				search: "",
+				doctype: "",
+				branch: "",
+				workflow_state: "",
+				aging_status: "",
+				date_from: "",
+				date_to: "",
+			},
+			selected_kpi: "total_pending",
+			start: 0,
+			page_length: 20,
+			loading: false,
+			compact: false,
+			pending_request_id: 0,
+			total: 0,
+			has_more: false,
+			items: [],
+			summary: {},
+			last_refreshed: null,
+		};
 
-		this._build_skeleton();
-		this._add_page_actions();
-		this.init();
+		this._render_shell();
+		this._bind_events();
+		this._setup_page_actions();
+		this._collapse_sidebar_default();
+		this._load_context();
 	}
 
-	// ----------------------------------------------------------
-	// Initialisation
-	// ----------------------------------------------------------
+	_collapse_sidebar_default() {
+		try {
+			const sidebar = frappe.app && frappe.app.sidebar;
+			if (!sidebar) return;
 
-	async init() {
+			// Persist collapsed preference and close if currently expanded
+			localStorage.setItem("sidebar-expanded", JSON.stringify(false));
+			if (sidebar.sidebar_expanded) {
+				sidebar.close();
+			}
+		} catch (e) {
+			// no-op
+		}
+	}
+
+	_setup_page_actions() {
+		this.page.set_secondary_action(__("Refresh"), () => this.refresh(), "refresh");
+	}
+
+	async _load_context() {
 		this._set_loading(true);
 		try {
-			await this._load_page_context();
+			const { message } = await frappe.call({ method: "approval_hub_frappe.api.approval_hub.get_page_context" });
+			const ctx = message || {};
+			if (!ctx.enabled) {
+				this._render_disabled(ctx.message || __("Approval Hub is currently disabled."));
+				return;
+			}
+			this.settings = ctx.settings || {};
+			this.configs = ctx.configs || [];
+			this.state.page_length = this.settings.default_page_size || 20;
+			this._render_filter_options(ctx);
+			await this.refresh();
 		} catch (e) {
-			this._show_error(__("Failed to load Approval Hub. Please refresh."));
+			this._render_error(e.message || __("Failed to load page context."));
 		} finally {
 			this._set_loading(false);
 		}
 	}
 
 	async refresh() {
-		this.current_page = 1;
-		this._set_loading(true);
-		try {
-			await Promise.all([
-				this._load_summary(),
-				this._load_pending(),
-			]);
-		} finally {
-			this._set_loading(false);
-		}
+		this.state.start = 0;
+		await Promise.all([this._load_summary(), this._load_pending(false)]);
+		this.state.last_refreshed = frappe.datetime.now_datetime();
+		this._render_last_refreshed();
 	}
-
-	// ----------------------------------------------------------
-	// Page context (first load)
-	// ----------------------------------------------------------
-
-	async _load_page_context() {
-		const r = await frappe.call({
-			method: "approval_hub_frappe.api.approval_hub.get_page_context",
-		});
-
-		const ctx = r.message || {};
-
-		if (!ctx.enabled) {
-			this._show_disabled(ctx.message || __("Approval Hub is disabled."));
-			return;
-		}
-
-		this.settings = ctx.settings || {};
-		this.page_size = this.settings.default_page_size || 20;
-		this.configs = ctx.configs || [];
-		this.branches = ctx.branches || [];
-
-		this._build_filters();
-		this._render_summary(ctx.summary || {});
-		await this._load_pending();
-	}
-
-	// ----------------------------------------------------------
-	// Summary cards
-	// ----------------------------------------------------------
 
 	async _load_summary() {
-		const r = await frappe.call({
+		const filters = this._effective_filters();
+		const { message } = await frappe.call({
 			method: "approval_hub_frappe.api.approval_hub.get_approval_summary",
-			args: { filters: this.filters },
+			args: { filters },
 		});
-		this._render_summary(r.message || {});
+		this.state.summary = message || {};
+		this._render_kpis();
 	}
 
-	_render_summary(data) {
-		const cards = [
-			{
-				key: "total_pending",
-				label: __("My Pending"),
-				value: data.total_pending || 0,
-				color: "var(--blue-500)",
-				icon: "⏳",
-			},
-			{
-				key: "critical",
-				label: __("Critical"),
-				value: data.critical || 0,
-				color: "var(--red-500)",
-				icon: "🔴",
-			},
-			{
-				key: "warning",
-				label: __("Warning"),
-				value: data.warning || 0,
-				color: "var(--green-500)",
-				icon: "🟠",
-			},
-			{
-				key: "normal",
-				label: __("Normal"),
-				value: data.normal || 0,
-				color: "var(--green-500)",
-				icon: "🟢",
-			},
-		];
-
-		const html = cards
-			.map(
-				(c) => `
-			<div class="ah-summary-card" style="border-top: 3px solid ${c.color};">
-				<div class="ah-summary-icon">${c.icon}</div>
-				<div class="ah-summary-value" id="ah-stat-${c.key}">${c.value}</div>
-				<div class="ah-summary-label">${c.label}</div>
-			</div>`
-			)
-			.join("");
-
-		this.$summary.html(html);
+	async _load_pending(append) {
+		const requestId = ++this.state.pending_request_id;
+		this._set_loading(true, "list");
+		try {
+			const filters = this._effective_filters();
+			const { message } = await frappe.call({
+				method: "approval_hub_frappe.api.approval_hub.get_pending_approvals",
+				args: {
+					filters,
+					start: this.state.start,
+					page_length: this.state.page_length,
+				},
+			});
+			if (requestId !== this.state.pending_request_id) return;
+			const data = message || {};
+			this.state.total = data.total || 0;
+			this.state.has_more = Boolean(data.has_more);
+			const incoming = data.items || [];
+			this.state.items = append ? this.state.items.concat(incoming) : incoming;
+			this._render_list();
+			this._render_list_meta();
+		} catch (e) {
+			this._render_error(e.message || __("Failed to load pending approvals."));
+		} finally {
+			this._set_loading(false, "list");
+		}
 	}
 
-	// ----------------------------------------------------------
-	// Filters
-	// ----------------------------------------------------------
+	_effective_filters() {
+		const f = { ...this.state.filters };
+		const kpi = this.state.selected_kpi;
+		if (kpi === "critical" || kpi === "warning" || kpi === "normal") {
+			f.aging_status = kpi;
+		}
+		return f;
+	}
 
-	_build_filters() {
-		// Doctype selector
-		const dtOptions = [{ value: "", label: __("All Doctypes") }].concat(this.configs);
-		let dtHtml = dtOptions.map((o) => `<option value="${o.value}">${o.label}</option>`).join("");
-
-		// Branch selector
-		const branchOptions = [{ value: "", label: __("All Branches") }].concat(
-			this.branches.map((b) => ({ value: b, label: b }))
-		);
-		let brHtml = branchOptions.map((o) => `<option value="${o.value}">${o.label}</option>`).join("");
-
-		this.$filters.html(`
-			<div class="ah-filters">
-				<div class="ah-filter-group">
-					<label>${__("Doctype")}</label>
-					<select class="form-control ah-filter" data-key="doctype">
-						${dtHtml}
-					</select>
+	_render_shell() {
+		this.$root.html(`
+			<div class="ah-page">
+				<div class="ah-header">
+					<div>
+						<h2 class="ah-title">${__("Approval Hub")}</h2>
+						<p class="ah-subtitle">${__("Documents waiting for your action")}</p>
+					</div>
+					<div class="ah-header-actions">
+						<button class="btn btn-default btn-sm ah-refresh">${__("Refresh")}</button>
+						<button class="btn btn-default btn-sm ah-compact-toggle">${__("Compact")}</button>
+						<span class="ah-last-refreshed"></span>
+					</div>
 				</div>
-				<div class="ah-filter-group">
-					<label>${__("Branch")}</label>
-					<select class="form-control ah-filter" data-key="branch">
-						${brHtml}
-					</select>
+				<div class="ah-kpi-grid"></div>
+				<div class="ah-filter-card">
+					<div class="ah-filter-title">${__("Filter Pending Approvals")}</div>
+					<div class="ah-filter-bar">
+						<div class="ah-field ah-field-search">
+							<label>${__("Search")}</label>
+							<div class="ah-search-control"></div>
+						</div>
+						<div class="ah-field">
+							<label>${__("DocType")}</label>
+							<div class="ah-doctype-control"></div>
+						</div>
+						<div class="ah-field">
+							<label>${__("Branch")}</label>
+							<div class="ah-branch-control"></div>
+						</div>
+						<div class="ah-field">
+							<label>${__("Workflow State")}</label>
+							<div class="ah-workflow-state-control"></div>
+						</div>
+						<div class="ah-field">
+							<label>${__("Aging")}</label>
+							<div class="ah-aging-control"></div>
+						</div>
+						<div class="ah-field">
+							<label>${__("Date From")}</label>
+							<div class="ah-date-from-control"></div>
+						</div>
+						<div class="ah-field">
+							<label>${__("Date To")}</label>
+							<div class="ah-date-to-control"></div>
+						</div>
+						<div class="ah-field ah-field-actions">
+							<label>&nbsp;</label>
+							<div class="ah-filter-actions-wrap">
+								<button class="btn btn-primary ah-apply">${__("Apply Filters")}</button>
+								<button class="btn btn-default ah-clear">${__("Clear")}</button>
+							</div>
+						</div>
+					</div>
 				</div>
-				<div class="ah-filter-group">
-					<label>${__("Workflow State")}</label>
-					<input type="text" class="form-control ah-filter"
-						   data-key="workflow_state" placeholder="${__("e.g. Pending")}">
-				</div>
-				<div class="ah-filter-group">
-					<label>${__("Date From")}</label>
-					<input type="date" class="form-control ah-filter" data-key="date_from">
-				</div>
-				<div class="ah-filter-group">
-					<label>${__("Date To")}</label>
-					<input type="date" class="form-control ah-filter" data-key="date_to">
-				</div>
-				<div class="ah-filter-group ah-filter-actions">
-					<button class="btn btn-primary btn-sm ah-apply-filters">
-						${__("Apply")}
-					</button>
-					<button class="btn btn-default btn-sm ah-clear-filters">
-						${__("Clear")}
-					</button>
-				</div>
+				<div class="ah-list-meta"></div>
+				<div class="ah-record-list"></div>
+				<div class="ah-load-more-wrap"><button class="btn btn-default ah-load-more">${__("Load More")}</button></div>
 			</div>
 		`);
 
-		this.$filters.on("click", ".ah-apply-filters", () => this._apply_filters());
-		this.$filters.on("click", ".ah-clear-filters", () => this._clear_filters());
-		// Allow Enter key in text inputs to trigger apply
-		this.$filters.on("keyup", "input.ah-filter", (e) => {
-			if (e.key === "Enter") this._apply_filters();
-		});
+		this.$kpis = this.$root.find(".ah-kpi-grid");
+		this.$list = this.$root.find(".ah-record-list");
+		this.$meta = this.$root.find(".ah-list-meta");
+		this.$lastRefreshed = this.$root.find(".ah-last-refreshed");
 	}
 
-	_apply_filters() {
-		const filters = {};
-		this.$filters.find(".ah-filter").each(function () {
-			const key = $(this).data("key");
-			const val = $(this).val().trim();
-			if (val) filters[key] = val;
-		});
-		this.filters = filters;
-		this.current_page = 1;
-		this.refresh();
+	_render_filter_options(ctx) {
+		this._init_filter_controls(ctx);
+		this._init_date_controls();
 	}
 
-	_clear_filters() {
-		this.$filters.find(".ah-filter").val("");
-		this.filters = {};
-		this.current_page = 1;
-		this.refresh();
-	}
+	_init_filter_controls(ctx) {
+		if (this.search_control && this.doctype_control && this.branch_control && this.workflow_state_control && this.aging_control) {
+			return;
+		}
 
-	// ----------------------------------------------------------
-	// Pending list
-	// ----------------------------------------------------------
-
-	async _load_pending() {
-		const r = await frappe.call({
-			method: "approval_hub_frappe.api.approval_hub.get_pending_approvals",
-			args: {
-				filters: this.filters,
-				page: this.current_page,
-				page_size: this.page_size,
+		this.search_control = frappe.ui.form.make_control({
+			parent: this.$root.find(".ah-search-control"),
+			df: {
+				fieldtype: "Data",
+				fieldname: "search",
+				label: "",
+				placeholder: __("Name, title, requester, branch, state"),
+				onchange: () => {
+					this.state.filters.search = this.search_control.get_value() || "";
+				},
 			},
+			render_input: true,
 		});
 
-		const data = r.message || {};
-		this.total = data.total || 0;
-		this.total_pages = data.total_pages || 1;
-		this._render_list(data.items || []);
-		this._render_pagination();
+		this.doctype_control = frappe.ui.form.make_control({
+			parent: this.$root.find(".ah-doctype-control"),
+			df: {
+				fieldtype: "Select",
+				fieldname: "doctype",
+				label: "",
+				options: [__("All Doctypes"), ...this.configs.map((c) => c.value)].join("\n"),
+				onchange: () => {
+					const value = this.doctype_control.get_value();
+					this.state.filters.doctype = value === __("All Doctypes") ? "" : (value || "");
+				},
+			},
+			render_input: true,
+		});
+
+		this.branch_control = frappe.ui.form.make_control({
+			parent: this.$root.find(".ah-branch-control"),
+			df: {
+				fieldtype: "Select",
+				fieldname: "branch",
+				label: "",
+				options: [__("All Branches"), ...(ctx.branches || [])].join("\n"),
+				onchange: () => {
+					const value = this.branch_control.get_value();
+					this.state.filters.branch = value === __("All Branches") ? "" : (value || "");
+				},
+			},
+			render_input: true,
+		});
+
+		this.workflow_state_control = frappe.ui.form.make_control({
+			parent: this.$root.find(".ah-workflow-state-control"),
+			df: {
+				fieldtype: "Select",
+				fieldname: "workflow_state",
+				label: "",
+				options: [__("All States"), ...(ctx.workflow_states || [])].join("\n"),
+				onchange: () => {
+					const value = this.workflow_state_control.get_value();
+					this.state.filters.workflow_state = value === __("All States") ? "" : (value || "");
+				},
+			},
+			render_input: true,
+		});
+
+		this.aging_control = frappe.ui.form.make_control({
+			parent: this.$root.find(".ah-aging-control"),
+			df: {
+				fieldtype: "Select",
+				fieldname: "aging_status",
+				label: "",
+				options: [
+					__("All Aging"),
+					__("Critical"),
+					__("Warning"),
+					__("Normal"),
+				].join("\n"),
+				onchange: () => {
+					const value = this.aging_control.get_value();
+					const map = {
+						[__("All Aging")]: "",
+						[__("Critical")]: "critical",
+						[__("Warning")]: "warning",
+						[__("Normal")]: "normal",
+					};
+					this.state.filters.aging_status = map[value] || "";
+				},
+			},
+			render_input: true,
+		});
+
+		this.doctype_control.set_value(__("All Doctypes"));
+		this.branch_control.set_value(__("All Branches"));
+		this.workflow_state_control.set_value(__("All States"));
+		this.aging_control.set_value(__("All Aging"));
 	}
 
-	_render_list(items) {
-		if (!items.length) {
+	_init_date_controls() {
+		if (this.date_from_control && this.date_to_control) return;
+
+		this.date_from_control = frappe.ui.form.make_control({
+			parent: this.$root.find(".ah-date-from-control"),
+			df: {
+				fieldtype: "Date",
+				fieldname: "date_from",
+				label: __("Date From"),
+				onchange: () => {
+					this.state.filters.date_from = this.date_from_control.get_value() || "";
+				},
+			},
+			render_input: true,
+		});
+
+		this.date_to_control = frappe.ui.form.make_control({
+			parent: this.$root.find(".ah-date-to-control"),
+			df: {
+				fieldtype: "Date",
+				fieldname: "date_to",
+				label: __("Date To"),
+				onchange: () => {
+					this.state.filters.date_to = this.date_to_control.get_value() || "";
+				},
+			},
+			render_input: true,
+		});
+
+		if (!this.state.filters.date_from) {
+			const fromDate = frappe.datetime.add_days(frappe.datetime.get_today(), -30);
+			this.date_from_control.set_value(fromDate);
+			this.state.filters.date_from = fromDate;
+		}
+		if (!this.state.filters.date_to) {
+			const toDate = frappe.datetime.get_today();
+			this.date_to_control.set_value(toDate);
+			this.state.filters.date_to = toDate;
+		}
+	}
+
+	_render_kpis() {
+		const s = this.state.summary || {};
+		const cards = [
+			["total_pending", __("Total Pending"), s.total_pending || 0, "teal"],
+			["critical", __("Critical"), s.critical || 0, "critical"],
+			["warning", __("Warning"), s.warning || 0, "warning"],
+			["normal", __("Normal"), s.normal || 0, "normal"],
+			["my_available_actions", __("My Available Actions"), s.my_available_actions || 0, "neutral"],
+			["oldest_pending", __("Oldest Pending"), s.oldest_pending || 0, "neutral"],
+		];
+		this.$kpis.html(
+			cards
+				.map(([key, label, value, tone]) => {
+					const active = this.state.selected_kpi === key ? "is-active" : "";
+					return `<button class="ah-kpi-card ${active} ah-kpi-${tone}" data-kpi="${key}"><span class="ah-kpi-label">${label}</span><span class="ah-kpi-value">${value}</span></button>`;
+				})
+				.join("")
+		);
+	}
+
+	_render_list_meta() {
+		this.$meta.text(
+			__("Showing {0} of {1}", [this.state.items.length, this.state.total])
+		);
+		this.$root.find(".ah-load-more-wrap").toggle(this.state.has_more);
+	}
+
+	_render_list() {
+		if (!this.state.items.length) {
 			this.$list.html(`
 				<div class="ah-empty-state">
-					<div class="ah-empty-icon">🎉</div>
-					<h3>${__("All caught up!")}</h3>
-					<p>${__("No documents are pending your approval right now.")}</p>
+					<div class="ah-empty-icon">✓</div>
+					<h4>${__("No pending approvals")}</h4>
+					<p>${__("You currently have no documents waiting for your action")}</p>
+					<button class="btn btn-default ah-refresh">${__("Refresh")}</button>
 				</div>
 			`);
 			return;
 		}
 
-		const rows = items.map((item) => this._render_row(item)).join("");
-
-		this.$list.html(`
-			<div class="ah-table-wrapper">
-				<table class="ah-table">
-					<thead>
-						<tr>
-							<th>${__("Doctype")}</th>
-							<th>${__("Document")}</th>
-							<th>${__("Title")}</th>
-							<th>${__("Branch")}</th>
-							<th>${__("Requester")}</th>
-							<th>${__("Workflow State")}</th>
-							<th>${__("Date")}</th>
-							<th>${__("Aging")}</th>
-							<th>${__("Actions")}</th>
-						</tr>
-					</thead>
-					<tbody>
-						${rows}
-					</tbody>
-				</table>
-			</div>
-		`);
-
-		// Bind action buttons
-		this.$list.on("click", ".ah-open-doc", (e) => {
-			const url = $(e.currentTarget).data("url");
-			if (url) frappe.set_route(url);
-		});
-
-		this.$list.on("click", ".ah-quick-action", (e) => {
-			const btn = $(e.currentTarget);
-			this._handle_quick_action(
-				btn.data("doctype"),
-				btn.data("docname"),
-				btn.data("action")
-			);
-		});
+		const rows = this.state.items.map((item) => this._row_html(item)).join("");
+		this.$list.html(`<div class="ah-table-wrap"><table class="ah-table"><thead><tr><th>${__("Document")}</th><th>${__("State")}</th><th>${__("Branch")}</th><th>${__("Requester")}</th><th>${__("Amount")}</th><th>${__("Age")}</th><th>${__("Actions")}</th></tr></thead><tbody>${rows}</tbody></table></div>`);
 	}
 
-	_render_row(item) {
-		const agingBadge = this._aging_badge(item.age_days, item.aging_status);
-		const stateBadge = `<span class="ah-state-badge">${item.workflow_state || ""}</span>`;
+	_row_html(item) {
+		const actions = (item.can_quick_action ? item.allowed_actions : []).map((a) => {
+			const cls = a.toLowerCase().includes("reject") ? "reject" : a.toLowerCase().includes("approve") ? "approve" : "neutral";
+			return `<button class="btn btn-xs ah-action-btn ah-action-${cls}" data-doctype="${frappe.utils.escape_html(item.doctype)}" data-docname="${frappe.utils.escape_html(item.name)}" data-action="${frappe.utils.escape_html(a)}">${frappe.utils.escape_html(a)}</button>`;
+		}).join(" ");
 
-		let actionHtml = `
-			<button class="btn btn-xs btn-default ah-open-doc"
-					data-url="${item.route}" title="${__("Open Document")}">
-				${__("Open")}
-			</button>
-		`;
-
-		if (item.can_quick_action && item.allowed_actions && item.allowed_actions.length) {
-			const actionBtns = item.allowed_actions
-				.map(
-					(action) => `
-				<button class="btn btn-xs ah-quick-action ah-action-${frappe.scrub(action)}"
-						data-doctype="${item.doctype}"
-						data-docname="${item.name}"
-						data-action="${action}">
-					${__(action)}
-				</button>`
-				)
-				.join("");
-			actionHtml += `<div class="ah-quick-actions">${actionBtns}</div>`;
-		}
-
-		const amount = item.amount != null
-			? frappe.format(item.amount, { fieldtype: "Currency" })
-			: "—";
-
+		const amount = item.amount != null ? frappe.format(item.amount, { fieldtype: "Currency" }) : "-";
+		const compactCls = this.state.compact ? "ah-row-compact" : "";
 		return `
-		<tr class="ah-row ${item.aging_status === "critical" ? "ah-row-critical" : ""}">
-			<td><span class="ah-doctype-badge">${item.config_label || item.doctype}</span></td>
-			<td>
-				<a href="${item.route}" target="_blank" class="ah-doc-link">
-					${item.name}
-				</a>
-			</td>
-			<td class="ah-col-title" title="${item.title || ""}">${item.title || "—"}</td>
-			<td>${item.branch || "—"}</td>
-			<td>${item.requester || "—"}</td>
-			<td>${stateBadge}</td>
-			<td>${item.date ? frappe.datetime.str_to_user(item.date) : "—"}</td>
-			<td>${agingBadge}</td>
-			<td class="ah-actions-cell">${actionHtml}</td>
-		</tr>`;
+			<tr class="${compactCls}">
+				<td>
+					<div class="ah-doc-title">${frappe.utils.escape_html(item.title || item.name)}</div>
+					<div class="ah-doc-meta"><span class="ah-badge ah-doctype">${frappe.utils.escape_html(item.config_label || item.doctype)}</span> <a href="${frappe.utils.escape_html(item.route)}">${frappe.utils.escape_html(item.name)}</a></div>
+				</td>
+				<td><span class="ah-badge ah-state">${frappe.utils.escape_html(item.workflow_state || "-")}</span></td>
+				<td>${frappe.utils.escape_html(item.branch || "-")}</td>
+				<td>${frappe.utils.escape_html(item.requester || "-")}</td>
+				<td>${amount}</td>
+				<td><span class="ah-badge ah-aging-${frappe.utils.escape_html(item.aging_status || "normal")}">${item.age_days != null ? `${item.age_days}d` : "-"}</span></td>
+				<td>
+					<div class="ah-row-actions">
+						<button class="btn btn-default btn-xs ah-open ah-ghost-btn" data-route="${frappe.utils.escape_html(item.route)}">${__("Open")}</button>
+						<button class="btn btn-default btn-xs ah-print ah-ghost-btn" data-doctype="${frappe.utils.escape_html(item.doctype)}" data-docname="${frappe.utils.escape_html(item.name)}">${__("Print")}</button>
+						${actions}
+					</div>
+				</td>
+			</tr>
+		`;
 	}
 
-	_aging_badge(days, status) {
-		if (days == null) return `<span class="ah-aging ah-aging-normal">—</span>`;
-		const label = `${days}d`;
-		return `<span class="ah-aging ah-aging-${status}" title="${__(status)}">${label}</span>`;
+	_bind_events() {
+		this.$root.on("click", ".ah-refresh", () => this.refresh());
+		this.$root.on("click", ".ah-apply", () => this.refresh());
+		this.$root.on("click", ".ah-clear", () => {
+			const fromDate = frappe.datetime.add_days(frappe.datetime.get_today(), -30);
+			const toDate = frappe.datetime.get_today();
+			this.state.filters = { search: "", doctype: "", branch: "", workflow_state: "", aging_status: "", date_from: fromDate, date_to: toDate };
+			if (this.search_control) this.search_control.set_value("");
+			if (this.doctype_control) this.doctype_control.set_value("");
+			if (this.branch_control) this.branch_control.set_value("");
+			if (this.workflow_state_control) this.workflow_state_control.set_value("");
+			if (this.aging_control) this.aging_control.set_value("");
+			if (this.date_from_control) this.date_from_control.set_value("");
+			if (this.date_to_control) this.date_to_control.set_value("");
+			if (this.date_from_control) this.date_from_control.set_value(fromDate);
+			if (this.date_to_control) this.date_to_control.set_value(toDate);
+			this.state.selected_kpi = "total_pending";
+			this.refresh();
+		});
+		this.$root.on("click", ".ah-kpi-card", (e) => {
+			this.state.selected_kpi = $(e.currentTarget).data("kpi");
+			this.state.start = 0;
+			this._load_pending(false);
+			this._render_kpis();
+		});
+		this.$root.on("keydown", ".ah-search-control input", (e) => {
+			if (e.key === "Enter") this.refresh();
+		});
+
+		this.$root.on("click", ".ah-open", (e) => {
+			const route = $(e.currentTarget).data("route");
+			if (route) frappe.set_route(route);
+		});
+		this.$root.on("click", ".ah-print", (e) => {
+			const doctype = $(e.currentTarget).data("doctype");
+			const docname = $(e.currentTarget).data("docname");
+			if (!doctype || !docname) return;
+			const url = `/printview?doctype=${encodeURIComponent(doctype)}&name=${encodeURIComponent(docname)}&trigger_print=1&_lang=${encodeURIComponent(frappe.boot.lang || "en")}`;
+			window.open(url, "_blank");
+		});
+
+		this.$root.on("click", ".ah-load-more", async () => {
+			if (this.state.loading || !this.state.has_more) return;
+			this.state.start += this.state.page_length;
+			await this._load_pending(true);
+		});
+
+		this.$root.on("click", ".ah-action-btn", (e) => {
+			const $btn = $(e.currentTarget);
+			this._run_action($btn.data("doctype"), $btn.data("docname"), $btn.data("action"));
+		});
+
+		this.$root.on("click", ".ah-compact-toggle", () => {
+			this.state.compact = !this.state.compact;
+			this.$root.find(".ah-page").toggleClass("ah-compact", this.state.compact);
+			this._render_list();
+		});
 	}
 
-	// ----------------------------------------------------------
-	// Pagination
-	// ----------------------------------------------------------
-
-	_render_pagination() {
-		if (this.total_pages <= 1) {
-			this.$pagination.html("");
-			return;
+	_run_action(doctype, docname, action) {
+		const needsRemarks = /reject|send back|return/i.test(action);
+		if (!needsRemarks) {
+			return this._confirm_and_submit_action(doctype, docname, action, null);
 		}
 
-		const prevDisabled = this.current_page <= 1 ? "disabled" : "";
-		const nextDisabled = this.current_page >= this.total_pages ? "disabled" : "";
-
-		this.$pagination.html(`
-			<div class="ah-pagination">
-				<span class="ah-pagination-info">
-					${__("Showing page {0} of {1} ({2} total)", [
-						this.current_page,
-						this.total_pages,
-						this.total,
-					])}
-				</span>
-				<div class="ah-pagination-controls">
-					<button class="btn btn-default btn-xs ah-prev-page" ${prevDisabled}>
-						&larr; ${__("Prev")}
-					</button>
-					<button class="btn btn-default btn-xs ah-next-page" ${nextDisabled}>
-						${__("Next")} &rarr;
-					</button>
-				</div>
-			</div>
-		`);
-
-		this.$pagination.on("click", ".ah-prev-page", () => {
-			if (this.current_page > 1) {
-				this.current_page--;
-				this._load_pending();
-			}
-		});
-
-		this.$pagination.on("click", ".ah-next-page", () => {
-			if (this.current_page < this.total_pages) {
-				this.current_page++;
-				this._load_pending();
-			}
-		});
-	}
-
-	// ----------------------------------------------------------
-	// Quick Actions
-	// ----------------------------------------------------------
-
-	_handle_quick_action(doctype, docname, action) {
-		const dialog = new frappe.ui.Dialog({
+		const d = new frappe.ui.Dialog({
 			title: __(action),
-			fields: [
-				{
-					fieldname: "remarks",
-					fieldtype: "Small Text",
-					label: __("Remarks (optional)"),
-				},
-			],
+			fields: [{ fieldname: "remarks", fieldtype: "Small Text", label: __("Remarks"), reqd: 1 }],
 			primary_action_label: __(action),
 			primary_action: (values) => {
-				dialog.hide();
-				this._apply_action(doctype, docname, action, values.remarks);
+				d.hide();
+				this._confirm_and_submit_action(doctype, docname, action, values.remarks);
 			},
 		});
-		dialog.show();
+		d.show();
 	}
 
-	async _apply_action(doctype, docname, action, remarks) {
-		frappe.dom.freeze(__("Applying action…"));
+	_confirm_and_submit_action(doctype, docname, action, remarks) {
+		frappe.confirm(
+			__("Are you sure you want to apply <b>{0}</b> on <b>{1}</b>?", [action, docname]),
+			() => this._submit_action(doctype, docname, action, remarks)
+		);
+	}
+
+	async _submit_action(doctype, docname, action, remarks) {
+		frappe.dom.freeze(__("Applying action..."));
 		try {
-			const r = await frappe.call({
+			const { message } = await frappe.call({
 				method: "approval_hub_frappe.api.approval_hub.apply_workflow_action_from_hub",
 				args: { doctype, docname, action, remarks },
 			});
-
-			if (r.message && r.message.success) {
-				frappe.show_alert({
-					message: r.message.message || __("Action applied."),
-					indicator: "green",
-				});
-				this.refresh();
-			}
-		} catch (err) {
-			frappe.msgprint({
-				title: __("Error"),
-				message: err.message || __("An error occurred. Please try again."),
-				indicator: "red",
-			});
+			frappe.show_alert({ message: (message && message.message) || __("Action applied"), indicator: "green" });
+			await this.refresh();
+		} catch (e) {
+			frappe.msgprint({ title: __("Action Failed"), message: e.message || __("Could not apply action."), indicator: "red" });
 		} finally {
 			frappe.dom.unfreeze();
 		}
 	}
 
-	// ----------------------------------------------------------
-	// Page structure
-	// ----------------------------------------------------------
-
-	_build_skeleton() {
-		const css = this._styles();
-
-		this.$main.html(`
-			<style>${css}</style>
-			<div class="ah-wrapper">
-				<div class="ah-summary-row" id="ah-summary"></div>
-				<div class="ah-filters-wrapper" id="ah-filters"></div>
-				<div class="ah-list-wrapper" id="ah-list">
-					<div class="ah-loading">${__("Loading…")}</div>
-				</div>
-				<div class="ah-pagination-wrapper" id="ah-pagination"></div>
-			</div>
-		`);
-
-		this.$summary = this.$main.find("#ah-summary");
-		this.$filters = this.$main.find("#ah-filters");
-		this.$list = this.$main.find("#ah-list");
-		this.$pagination = this.$main.find("#ah-pagination");
+	_render_disabled(message) {
+		this.$root.html(`<div class="ah-error-state"><h4>${__("Approval Hub Disabled")}</h4><p>${frappe.utils.escape_html(message)}</p></div>`);
 	}
 
-	_add_page_actions() {
-		this.page.add_action_item(__("Refresh"), () => this.refresh());
-		this.page.set_secondary_action(__("Refresh"), () => this.refresh(), "refresh");
+	_render_error(message) {
+		this.$list.html(`<div class="ah-error-state"><h4>${__("Something went wrong")}</h4><p>${frappe.utils.escape_html(message)}</p><button class="btn btn-default ah-refresh">${__("Retry")}</button></div>`);
 	}
 
-	_set_loading(state) {
-		this.loading = state;
-		if (state) {
-			this.$list.html(`<div class="ah-loading"><div class="ah-spinner"></div>${__("Loading…")}</div>`);
+	_render_last_refreshed() {
+		if (!this.state.last_refreshed) return;
+		this.$lastRefreshed.text(__("Last refreshed: {0}", [frappe.datetime.str_to_user(this.state.last_refreshed)]));
+	}
+
+	_set_loading(value, scope) {
+		this.state.loading = value;
+		if (scope === "list" && value) {
+			this.$list.html(`<div class="ah-loading">${__("Loading pending approvals...")}</div>`);
 		}
-	}
-
-	_show_disabled(message) {
-		this.$main.html(`
-			<div class="ah-disabled-state">
-				<div class="ah-disabled-icon">🔒</div>
-				<h3>${__("Approval Hub Disabled")}</h3>
-				<p>${message}</p>
-			</div>
-		`);
-	}
-
-	_show_error(message) {
-		this.$list.html(`
-			<div class="ah-error-state">
-				<p>⚠️ ${message}</p>
-			</div>
-		`);
-	}
-
-	// ----------------------------------------------------------
-	// Styles (scoped to page)
-	// ----------------------------------------------------------
-
-	_styles() {
-		return `
-/* ---- Approval Hub scoped styles ---- */
-.ah-wrapper { padding: 16px 0; }
-
-/* Summary cards */
-.ah-summary-row {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-	gap: 16px;
-	margin-bottom: 24px;
-}
-.ah-summary-card {
-	background: var(--card-bg);
-	border-radius: var(--border-radius-lg);
-	padding: 20px 16px;
-	text-align: center;
-	box-shadow: var(--shadow-sm);
-}
-.ah-summary-icon { font-size: 24px; margin-bottom: 8px; }
-.ah-summary-value {
-	font-size: 2rem;
-	font-weight: 700;
-	color: var(--text-color);
-}
-.ah-summary-label {
-	font-size: var(--text-sm);
-	color: var(--text-muted);
-	margin-top: 4px;
-}
-
-/* Filters */
-.ah-filters {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 12px;
-	align-items: flex-end;
-	background: var(--card-bg);
-	padding: 16px;
-	border-radius: var(--border-radius-lg);
-	box-shadow: var(--shadow-sm);
-	margin-bottom: 20px;
-}
-.ah-filter-group {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	min-width: 160px;
-}
-.ah-filter-group label {
-	font-size: var(--text-sm);
-	font-weight: 500;
-	color: var(--text-muted);
-}
-.ah-filter-actions {
-	flex-direction: row;
-	gap: 8px;
-	align-items: flex-end;
-	min-width: auto;
-}
-
-/* Table */
-.ah-table-wrapper { overflow-x: auto; }
-.ah-table {
-	width: 100%;
-	border-collapse: collapse;
-	font-size: var(--text-sm);
-}
-.ah-table thead th {
-	background: var(--subtle-bg);
-	padding: 10px 12px;
-	text-align: left;
-	font-weight: 600;
-	color: var(--text-muted);
-	border-bottom: 1px solid var(--border-color);
-	white-space: nowrap;
-}
-.ah-table tbody tr {
-	border-bottom: 1px solid var(--border-color);
-	transition: background 0.1s;
-}
-.ah-table tbody tr:hover { background: var(--hover-bg); }
-.ah-table tbody td {
-	padding: 10px 12px;
-	vertical-align: middle;
-}
-.ah-row-critical { background: rgba(255, 59, 48, 0.05); }
-
-/* Doc link */
-.ah-doc-link {
-	color: var(--primary);
-	text-decoration: none;
-	font-weight: 500;
-}
-.ah-doc-link:hover { text-decoration: underline; }
-
-/* Column constraints */
-.ah-col-title {
-	max-width: 200px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-/* Badges */
-.ah-doctype-badge {
-	background: var(--blue-100);
-	color: var(--blue-700);
-	padding: 2px 8px;
-	border-radius: 12px;
-	font-size: 11px;
-	font-weight: 600;
-	white-space: nowrap;
-}
-.ah-state-badge {
-	background: var(--subtle-bg);
-	border: 1px solid var(--border-color);
-	padding: 2px 8px;
-	border-radius: 12px;
-	font-size: 11px;
-	white-space: nowrap;
-}
-
-/* Aging */
-.ah-aging {
-	padding: 3px 10px;
-	border-radius: 12px;
-	font-size: 11px;
-	font-weight: 600;
-	white-space: nowrap;
-}
-.ah-aging-normal {
-	background: var(--green-100, #d1fae5);
-	color: var(--green-700, #047857);
-}
-.ah-aging-warning {
-	background: var(--orange-100, #ffedd5);
-	color: var(--orange-700, #c2410c);
-}
-.ah-aging-critical {
-	background: var(--red-100, #fee2e2);
-	color: var(--red-700, #b91c1c);
-}
-
-/* Actions */
-.ah-actions-cell { white-space: nowrap; }
-.ah-quick-actions { display: inline-flex; gap: 4px; margin-left: 4px; }
-.ah-action-approve { background: var(--green-500) !important; color: #fff !important; border-color: var(--green-500) !important; }
-.ah-action-reject  { background: var(--red-500)   !important; color: #fff !important; border-color: var(--red-500) !important; }
-.ah-action-send-back { background: var(--orange-400) !important; color: #fff !important; border-color: var(--orange-400) !important; }
-
-/* Pagination */
-.ah-pagination {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 12px 0;
-	font-size: var(--text-sm);
-	color: var(--text-muted);
-}
-.ah-pagination-controls { display: flex; gap: 8px; }
-
-/* States */
-.ah-empty-state, .ah-disabled-state, .ah-error-state {
-	text-align: center;
-	padding: 64px 24px;
-	color: var(--text-muted);
-}
-.ah-empty-icon, .ah-disabled-icon { font-size: 48px; margin-bottom: 16px; }
-.ah-empty-state h3, .ah-disabled-state h3 { color: var(--text-color); }
-.ah-loading {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 48px;
-	justify-content: center;
-	color: var(--text-muted);
-}
-.ah-spinner {
-	width: 20px; height: 20px;
-	border: 3px solid var(--border-color);
-	border-top-color: var(--primary);
-	border-radius: 50%;
-	animation: ah-spin 0.7s linear infinite;
-}
-@keyframes ah-spin { to { transform: rotate(360deg); } }
-`;
 	}
 }

@@ -250,3 +250,8 @@ doc_events = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+
+
+page_css = {
+    "approval-hub": "approval_hub_frappe/approval_hub_frappe/page/approval_hub/approval_hub.css",
+}
