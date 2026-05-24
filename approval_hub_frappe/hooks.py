@@ -1,9 +1,10 @@
 app_name = "approval_hub_frappe"
 app_title = "Approval Hub Frappe"
 app_publisher = "Ahmad Zubair Amini"
-app_description = "Approval Hub Frappe"
+app_description = "Centralized role-based approval hub for Frappe and ERPNext"
 app_email = "zubairamini.cs@gmail.com"
-app_license = "gpl-3.0"
+app_license = "MIT"
+app_version = "1.0.0"
 
 # Apps
 # ------------------
