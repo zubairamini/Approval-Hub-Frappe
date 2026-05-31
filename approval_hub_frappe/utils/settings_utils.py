@@ -32,7 +32,6 @@ def get_approval_hub_settings(use_cache: bool = True) -> dict:
     try:
         meta = frappe.get_meta("Approval Hub Settings")
         cols = set(meta.get_valid_columns())
-        row = frappe.db.get_value("Approval Hub Settings", "Approval Hub Settings", "*", as_dict=True) or {}
     except Exception:
         _cache_settings(settings)
         return settings
@@ -48,8 +47,10 @@ def get_approval_hub_settings(use_cache: bool = True) -> dict:
     ]
 
     for fieldname in int_fields:
-        if fieldname in cols and fieldname in row:
-            settings[fieldname] = cint(row.get(fieldname))
+        if fieldname in cols:
+            value = frappe.db.get_single_value("Approval Hub Settings", fieldname)
+            if value is not None:
+                settings[fieldname] = cint(value)
 
     settings["enabled"] = 1 if settings["enabled"] else 0
     settings["respect_user_permissions"] = 1 if settings["respect_user_permissions"] else 0
