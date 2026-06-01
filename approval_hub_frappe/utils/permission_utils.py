@@ -36,7 +36,7 @@ def system_manager_override_applies(user: str, settings: dict | None = None) -> 
 def has_document_access(user: str, doctype: str, docname: str) -> bool:
     try:
         return bool(frappe.has_permission(doctype=doctype, ptype="read", doc=docname, user=user))
-    except Exception:
+    except (frappe.DoesNotExistError, frappe.ValidationError, frappe.PermissionError):
         return False
 
 
@@ -84,7 +84,7 @@ def resolve_branch_value(doc_dict: dict, config: dict) -> str | None:
         if resolver_hooks:
             try:
                 return frappe.get_attr(resolver_hooks[-1])(doc_dict, config)
-            except Exception:
+            except (frappe.DoesNotExistError, frappe.ValidationError, TypeError, ValueError):
                 frappe.log_error(frappe.get_traceback(), "Approval Hub Branch Resolver Error")
 
     return doc_dict.get(branch_field)

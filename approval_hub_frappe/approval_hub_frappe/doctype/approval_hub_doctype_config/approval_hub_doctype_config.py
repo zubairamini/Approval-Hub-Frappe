@@ -1,5 +1,4 @@
 
-import json
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -74,7 +73,7 @@ def _validate_doctype_exists(doc):
 
     if not frappe.db.exists("DocType", doc.doctype_name):
         frappe.throw(
-            _(f"Doctype '{doc.doctype_name}' does not exist in this system."),
+            _("Doctype '{0}' does not exist in this system.").format(doc.doctype_name),
             frappe.ValidationError,
         )
 
@@ -103,9 +102,9 @@ def _validate_field_mappings(doc):
         if field_value not in doctype_fields:
             frappe.throw(
                 _(
-                    f"Field '{field_value}' (mapped as {attr}) does not exist "
-                    f"on Doctype '{doc.doctype_name}'."
-                ),
+                    "Field '{0}' (mapped as {1}) does not exist "
+                    "on Doctype '{2}'."
+                ).format(field_value, attr, doc.doctype_name),
                 frappe.ValidationError,
             )
 
@@ -138,9 +137,9 @@ def _validate_no_duplicate_active(doc):
     if existing:
         frappe.throw(
             _(
-                f"An active Approval Hub Doctype Config already exists for "
-                f"'{doc.doctype_name}' ({existing}). Please deactivate it first."
-            ),
+                "An active Approval Hub Doctype Config already exists for "
+                "'{0}' ({1}). Please deactivate it first."
+            ).format(doc.doctype_name, existing),
             frappe.DuplicateEntryError,
         )
 
@@ -161,9 +160,9 @@ def _validate_workflow_state_field(doc):
     if "workflow_state" not in doctype_fields:
         frappe.throw(
             _(
-                f"workflow_required is enabled, but the doctype '{doc.doctype_name}' "
-                f"does not have a 'workflow_state' field. Please map the Workflow State Field."
-            ),
+                "workflow_required is enabled, but the doctype '{0}' "
+                "does not have a 'workflow_state' field. Please map the Workflow State Field."
+            ).format(doc.doctype_name),
             frappe.ValidationError,
         )
 

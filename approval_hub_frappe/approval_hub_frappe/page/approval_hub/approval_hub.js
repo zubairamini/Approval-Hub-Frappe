@@ -467,8 +467,7 @@ class ApprovalHubPage {
 			const doctype = $(e.currentTarget).data("doctype");
 			const docname = $(e.currentTarget).data("docname");
 			if (!doctype || !docname) return;
-			const url = `/printview?doctype=${encodeURIComponent(doctype)}&name=${encodeURIComponent(docname)}&trigger_print=1&_lang=${encodeURIComponent(frappe.boot.lang || "en")}`;
-			window.open(url, "_blank");
+			this._open_print_preview(doctype, docname);
 		});
 
 		this.$root.on("click", ".ah-load-more", async () => {
@@ -548,5 +547,148 @@ class ApprovalHubPage {
 		if (scope === "list" && value) {
 			this.$list.html(`<div class="ah-loading">${__("Loading pending approvals...")}</div>`);
 		}
+	}
+
+	_open_print_preview(doctype, docname) {
+		const lang = (frappe.boot && frappe.boot.lang) || "en";
+		const previewUrl = `/printview?doctype=${encodeURIComponent(doctype)}&name=${encodeURIComponent(docname)}&_lang=${encodeURIComponent(lang)}`;
+		const safeTitle = frappe.utils.escape_html(`${doctype} ${docname}`);
+		const labels = {
+			zoomOut: frappe.utils.escape_html(__("Zoom Out")),
+			zoomIn: frappe.utils.escape_html(__("Zoom In")),
+			zoomReset: frappe.utils.escape_html(__("Reset Zoom")),
+			print: frappe.utils.escape_html(__("Print")),
+			preview: frappe.utils.escape_html(__("Print Preview")),
+		};
+
+		const previewWindow = window.open("", "_blank");
+		if (!previewWindow) {
+			frappe.msgprint({
+				title: __("Popup Blocked"),
+				message: __("Please allow popups to open the print preview."),
+				indicator: "orange",
+			});
+			return;
+		}
+
+		const html = `<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>${safeTitle}</title>
+	<style>
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+			height: 100vh;
+			display: flex;
+			flex-direction: column;
+			background: #f5f7fa;
+		}
+		.preview-toolbar {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 10px 16px;
+			background: #ffffff;
+			border-bottom: 1px solid #dfe3e8;
+			gap: 12px;
+		}
+		.preview-title {
+			font-size: 16px;
+			font-weight: 600;
+			color: #1f2d3d;
+		}
+		.preview-actions {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+		.preview-actions button {
+			border: 1px solid #dfe3e8;
+			background: #ffffff;
+			padding: 6px 10px;
+			border-radius: 6px;
+			font-size: 12px;
+			cursor: pointer;
+		}
+		.preview-actions button.primary {
+			background: #2490ef;
+			color: #ffffff;
+			border-color: #2490ef;
+		}
+		.preview-zoom {
+			font-size: 12px;
+			color: #52616b;
+			min-width: 48px;
+			text-align: center;
+		}
+		.preview-frame-wrap {
+			flex: 1 1 auto;
+			overflow: auto;
+			background: #e9edf2;
+			padding: 12px;
+		}
+		.preview-frame {
+			border: 0;
+			width: 100%;
+			height: 100%;
+			background: #ffffff;
+			box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+		}
+	</style>
+</head>
+<body>
+	<div class="preview-toolbar">
+		<div class="preview-title">${labels.preview}</div>
+		<div class="preview-actions">
+			<button id="zoom-out" title="${labels.zoomOut}">-</button>
+			<span class="preview-zoom" id="zoom-label">100%</span>
+			<button id="zoom-in" title="${labels.zoomIn}">+</button>
+			<button id="zoom-reset" title="${labels.zoomReset}">${labels.zoomReset}</button>
+			<button id="print-btn" class="primary">${labels.print}</button>
+		</div>
+	</div>
+	<div class="preview-frame-wrap">
+		<iframe class="preview-frame" id="print-preview-frame" src="${previewUrl}"></iframe>
+	</div>
+	<script>
+		(() => {
+			const iframe = document.getElementById("print-preview-frame");
+			const zoomLabel = document.getElementById("zoom-label");
+			const zoomIn = document.getElementById("zoom-in");
+			const zoomOut = document.getElementById("zoom-out");
+			const zoomReset = document.getElementById("zoom-reset");
+			const printBtn = document.getElementById("print-btn");
+			let zoom = 1;
+			const clamp = (value) => Math.min(2, Math.max(0.5, value));
+			const applyZoom = (value) => {
+				zoom = clamp(value);
+				iframe.style.transform = "scale(" + zoom + ")";
+				iframe.style.transformOrigin = "0 0";
+				iframe.style.width = (100 / zoom) + "%";
+				iframe.style.height = (100 / zoom) + "%";
+				zoomLabel.textContent = Math.round(zoom * 100) + "%";
+			};
+			zoomIn.addEventListener("click", () => applyZoom(zoom + 0.1));
+			zoomOut.addEventListener("click", () => applyZoom(zoom - 0.1));
+			zoomReset.addEventListener("click", () => applyZoom(1));
+			printBtn.addEventListener("click", () => {
+				if (!iframe.contentWindow) return;
+				iframe.contentWindow.focus();
+				iframe.contentWindow.print();
+			});
+			applyZoom(1);
+		})();
+	</script>
+</body>
+</html>`;
+
+		previewWindow.document.open();
+		previewWindow.document.write(html);
+		previewWindow.document.close();
+		previewWindow.focus();
 	}
 }

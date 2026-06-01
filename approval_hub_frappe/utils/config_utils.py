@@ -121,7 +121,7 @@ def _parse_config_row(config: dict) -> dict:
         try:
             parsed = json.loads(raw)
             config["base_filters"] = parsed if isinstance(parsed, dict) else {}
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError):
             frappe.log_error(
                 f"Invalid base_filters_json on Approval Hub Doctype Config: {config.get('name')}",
                 "Approval Hub Config Parse Error",

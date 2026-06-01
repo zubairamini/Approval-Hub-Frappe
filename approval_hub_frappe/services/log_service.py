@@ -59,7 +59,7 @@ def create_approval_hub_log(
         )
         log.insert(ignore_permissions=True)
         return log.name
-    except Exception:
+    except (frappe.ValidationError, frappe.DuplicateEntryError, frappe.MandatoryError, frappe.PermissionError):
         frappe.log_error(frappe.get_traceback(), "Approval Hub - Log creation failed")
         return None
 
@@ -89,7 +89,5 @@ def get_logs_for_document(doctype: str, docname: str, limit: int = 50) -> list[d
 def _resolve_field(doc, field_name: str | None):
     if not field_name:
         return None
-    try:
-        return getattr(doc, field_name, None) or doc.get(field_name)
-    except Exception:
-        return None
+    value = getattr(doc, field_name, None)
+    return value if value is not None else doc.get(field_name)
