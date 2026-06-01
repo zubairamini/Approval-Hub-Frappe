@@ -45,9 +45,6 @@ class ApprovalHubSettings(Document):
 
 def _clear_settings_cache():
     """Clear per-request cached settings (no-op if not in request context)."""
-    try:
-        from approval_hub_frappe.utils.settings_utils import _SETTINGS_CACHE_KEY
-        if hasattr(frappe.local, _SETTINGS_CACHE_KEY):
-            delattr(frappe.local, _SETTINGS_CACHE_KEY)
-    except Exception:
-        pass
+    from approval_hub_frappe.utils.settings_utils import _SETTINGS_CACHE_KEY
+    if hasattr(frappe.local, _SETTINGS_CACHE_KEY):
+        delattr(frappe.local, _SETTINGS_CACHE_KEY)

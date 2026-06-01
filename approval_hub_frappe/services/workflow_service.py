@@ -14,7 +14,6 @@ from frappe.model.workflow import (
     get_workflow_name,
     apply_workflow,
 )
-from frappe.utils import now_datetime
 
 
 # ---------------------------------------------------------------------------
@@ -25,9 +24,9 @@ def get_workflow_for_doctype(doctype: str) -> str | None:
     """Return the active workflow name for a doctype, or None."""
     try:
         wf_name = get_workflow_name(doctype)
-        return wf_name or None
-    except Exception:
+    except (frappe.DoesNotExistError, frappe.ValidationError):
         return None
+    return wf_name or None
 
 
 def get_workflow_doc(doctype: str):
@@ -37,7 +36,7 @@ def get_workflow_doc(doctype: str):
         return None
     try:
         return frappe.get_doc("Workflow", wf_name)
-    except Exception:
+    except (frappe.DoesNotExistError, frappe.ValidationError):
         return None
 
 
@@ -59,7 +58,7 @@ def get_workflow_state(doctype: str, docname: str, workflow_state_field: str = "
     field = workflow_state_field or "workflow_state"
     try:
         return frappe.db.get_value(doctype, docname, field)
-    except Exception:
+    except (frappe.DoesNotExistError, frappe.ValidationError):
         return None
 
 
@@ -161,7 +160,7 @@ def apply_workflow_action(
     wf_doc = get_workflow_doc(doctype)
 
     if not wf_doc:
-        frappe.throw(_(f"No active workflow found for {doctype}."))
+        frappe.throw(_("No active workflow found for {0}.").format(doctype))
 
     wf_state_field = wf_doc.workflow_state_field or "workflow_state"
     from_state = get_workflow_state(doctype, docname, wf_state_field)
@@ -179,7 +178,7 @@ def apply_workflow_action(
 
     if action not in allowed_actions:
         frappe.throw(
-            _(f"Action '{action}' is not permitted for you on this document."),
+            _("Action '{0}' is not permitted for you on this document.").format(action),
             frappe.PermissionError,
         )
 
@@ -190,11 +189,14 @@ def apply_workflow_action(
     doc.workflow_action = action  # some versions use this attribute
     try:
         apply_workflow(doc, action)
-        doc.add_comment("Workflow", _(f"Action '{action}' applied from Approval Hub. {remarks or ''}").strip())
+        comment = _("Action '{0}' applied from Approval Hub.").format(action)
+        if remarks:
+            comment = f"{comment} {remarks}"
+        doc.add_comment("Workflow", comment)
         doc.save(ignore_permissions=False)
-    except Exception as e:
+    except (frappe.ValidationError, frappe.PermissionError) as e:
         frappe.log_error(frappe.get_traceback(), "Approval Hub - apply_workflow error")
-        frappe.throw(_(f"Failed to apply workflow action: {str(e)}"))
+        frappe.throw(_("Failed to apply workflow action: {0}").format(str(e)))
 
     new_state = get_workflow_state(doctype, docname, wf_state_field)
 
@@ -212,5 +214,5 @@ def apply_workflow_action(
     return {
         "success": True,
         "new_state": new_state,
-        "message": _(f"Action '{action}' applied successfully. New state: {new_state}"),
+        "message": _("Action '{0}' applied successfully. New state: {1}").format(action, new_state),
     }

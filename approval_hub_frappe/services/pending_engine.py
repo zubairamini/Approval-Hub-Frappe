@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 import frappe
-from frappe.utils import date_diff, flt, nowdate
+from frappe.utils import date_diff, flt, getdate, nowdate
 
 from approval_hub_frappe.services.workflow_service import get_allowed_actions_for_user, get_workflow_doc
 from approval_hub_frappe.utils.config_utils import get_active_doctype_configs, validate_config_field_mapping
@@ -281,9 +281,13 @@ class PendingApprovalEngine:
         if not date_value:
             return None, "normal"
         try:
-            days = date_diff(nowdate(), str(date_value)[:10])
-        except Exception:
+            parsed = getdate(date_value)
+        except (TypeError, ValueError):
             return None, "normal"
+        if not parsed:
+            return None, "normal"
+
+        days = date_diff(nowdate(), parsed)
 
         if days >= self.critical_days:
             return days, "critical"

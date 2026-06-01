@@ -32,7 +32,7 @@ def get_approval_hub_settings(use_cache: bool = True) -> dict:
     try:
         meta = frappe.get_meta("Approval Hub Settings")
         cols = set(meta.get_valid_columns())
-    except Exception:
+    except (frappe.DoesNotExistError, frappe.ValidationError):
         _cache_settings(settings)
         return settings
 

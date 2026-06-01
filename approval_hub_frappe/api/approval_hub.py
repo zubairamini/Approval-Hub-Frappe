@@ -16,7 +16,12 @@ from approval_hub_frappe.utils.settings_utils import get_approval_hub_settings
 
 def _parse_filters(filters):
     if isinstance(filters, str):
-        return json.loads(filters) if filters else {}
+        if not filters:
+            return {}
+        try:
+            return json.loads(filters)
+        except json.JSONDecodeError:
+            frappe.throw(_("Invalid filters payload."), frappe.ValidationError)
     return filters or {}
 
 
